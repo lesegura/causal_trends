@@ -1,0 +1,1123 @@
+---
+title: "Artifactual Trends"
+author: "Luis Segura & Natalie Levy"
+date: "5/26/2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r global_options, include=F}
+library(formatR)
+library(knitr)
+library(ggplot2)
+library(dagitty)
+library(pander)
+#setwd("/Users/luissegura/Dropbox/Causal Trends")
+#setwd("/Users/les2196/Dropbox/Causal Trends")
+setwd ("/Users/nslevy/Dropbox/Causal Trends/Rcode")
+knitr::opts_chunk$set(echo = F, message = F, results="markup", comment = "##", autodep = T, fig.show = "asis", fig.lp = "Figure", error = TRUE, warning = F, tidy.opts=list(width.cutoff=80), tidy=TRUE)
+```
+
+## DATA GENERATING MECHANISM FOR SCENARIO 1
+
+#### Hypothetical Causal DAG for the relationship between confounder C, exposure E, and outcome D
+```{r dag, echo = F, fig.height = 1.5, fig.width = 3, fig.align = "center", out.width = "70%"}
+dag1<-dagitty( 'dag {
+         C [pos = "1,0"]
+         D [pos = "2,1"]
+         E [pos = "0,1"]
+         E <- C -> D
+         }')
+
+
+plot(dag1)
+```
+
+
+```{r causes_of_d, echo = F}
+scc_m_d<-as.data.frame(matrix(data = NA, nrow = 3, ncol = 3))
+colnames(scc_m_d)<-c("Sufficient_Component_Cause", "Causal_Partner", "value")
+scc_m_d$Sufficient_Component_Cause<-factor(c(1, 2, 2), labels = c("p1s", "p2s"))
+scc_m_d$Causal_Partner<-factor(c(1, 2, 3), labels = c("U2", "C", "U1"))
+scc_m_d$value<-c(100, 50, 50)
+scc_m_d$pos<-c(100, 25, 75)
+
+
+ggplot(data = scc_m_d, 
+       aes(x=factor(1), y = value, fill = Causal_Partner)) +
+  geom_bar(stat = "identity", width = 1) +
+  geom_text(aes(x = factor(1), y = pos, label = Causal_Partner), size = 15) +
+  facet_grid(.~Sufficient_Component_Cause) + 
+  coord_polar(theta = "y", start = 0) +
+  theme(panel.grid.minor=element_blank(), 
+        panel.grid.major=element_blank(), 
+        panel.background = element_rect(fill="white", 
+                                        colour = "white"), 
+        legend.title=element_blank(), 
+        legend.position="none", 
+        plot.title = element_text(size=18), 
+        plot.caption = element_text(size = 8), 
+        axis.ticks = element_blank(), 
+        axis.text = element_blank(), 
+        axis.title = element_blank()) + 
+  labs(title = "Tier 1 - Hypothetical Causes of D", 
+       caption = "SCC: sufficient component cause.")
+```
+
+```{r causes_of_e, echo = F}
+scc_m_e<-as.data.frame(matrix(data = NA, nrow = 3, ncol = 3))
+colnames(scc_m_e)<-c("Sufficient_Component_Cause", "Causal_Partner", "value")
+scc_m_e$Sufficient_Component_Cause<-factor(c(1, 2, 2), labels = c("p1s", "p2s"))
+scc_m_e$Causal_Partner<-factor(c(1, 2, 3), labels = c("U3", "U4", "C"))
+scc_m_e$value<-c(100, 50, 50)
+scc_m_e$pos<-c(100, 25, 75)
+
+
+ggplot(data = scc_m_e, 
+       aes(x=factor(1), y = value, fill = Causal_Partner)) +
+  geom_bar(stat = "identity", width = 1) +
+  geom_text(aes(x = factor(1), y = pos, label = Causal_Partner), size = 15) +
+  facet_grid(.~Sufficient_Component_Cause) + 
+  coord_polar(theta = "y", start = 0) +
+  theme(panel.grid.minor=element_blank(), 
+        panel.grid.major=element_blank(), 
+        panel.background = element_rect(fill="white", 
+                                        colour = "white"), 
+        legend.title=element_blank(), 
+        legend.position="none", 
+        plot.title = element_text(size=18), 
+        plot.caption = element_text(size = 8), 
+        axis.ticks = element_blank(), 
+        axis.text = element_blank(), 
+        axis.title = element_blank()) + 
+      scale_fill_manual(values = c("orange1", "mintcream", "magenta4")) +
+  labs(title = "Tier 2 - Hypothetical Causes of E", 
+       caption = "SCC: sufficient component cause.")
+```
+
+#### FUNCTIONS
+
+```{r functions, echo=F}
+
+### Create functions for Risk Ratios and Odds Ratios
+
+# RR
+risk_r<-function(p1, p2){
+  (p1+p2) / p1
+}
+
+# OR
+#or_<-function(p1, p2, p4){
+#  ((p1+p2) / (p1)) / ((p4) / (p4 + p2)) 
+#}
+
+# Alternative coding for OR (I think this might be "safer" because it constrains all response types to sum to 1)
+or_<-function(p1, p2){
+  ((p1+p2) / (p1)) / ((1-(p1+p2)) / ((1-(p1+p2)) + p2))
+}
+
+# Ratio of Log odds
+ln_or<-function(p1, p2, p4){
+  log((p1+p2) / (p1)) / log((p4) / (p4 + p2)) 
+}
+
+# Exponential growth function
+exp_fun<-function(x, r, t){
+  x*((1+r)^t)
+}
+
+# Expit Function (aka Logistic Function)
+expit<-function(z){1/(1+exp(-(z)))}
+
+# Odds Function
+odds<-function(x){
+  x/(1-x)
+}
+
+# Log Odds Function
+ln_odds<-function(x){
+  log(x/(1-x))
+}
+
+# Exponentiated Logit Function (calculates a probability from an odds ratio)
+logit<-function(a, b, x){
+  exp(a + b*x) / (1 + exp(a + b*x))
+}
+
+```
+
+#### FIRST SCENARIO RULES
+- Rule 1: The confounder (C) has a constant prevalence at each t in the whole population
+
+- Rule 2: C causes D and E
+
+- Rule 3: No change in the prevalence of the causes of D
+
+- Rule 4: We are assuming monotonicity for causes of E, C, D
+
+- Rule 5: We are holding p4 for E constant at 0.60
+
+- Rule 6: We are holding p4 for D constant at 0.70
+
+- Rule 7: The source of doomedness for E increase at each t such that the proportion of doom for E (p1) increases at each t. 
+
+- Rule 8: E does not cause D
+
+
+```{r , echo = F}
+
+#---------------------------------------------#
+#                                             #
+#                 CAUSES OF E                 #
+#                                             #
+#---------------------------------------------#
+cause_tab<-data.frame(matrix(NA, nrow=10, ncol=1))
+cause_tab[, 1]<-2009:2018
+
+p1_e<-data.frame(matrix(NA, nrow=10, ncol=1))
+p1_e[1,]<-exp_fun(0.04, 0.285, 0)
+p1_e[2,]<-exp_fun(0.04, 0.285, 1)
+p1_e[3,]<-exp_fun(0.04, 0.285, 2)
+p1_e[4,]<-exp_fun(0.04, 0.285, 3)
+p1_e[5,]<-exp_fun(0.04, 0.285, 4)
+p1_e[6,]<-exp_fun(0.04, 0.285, 5)
+p1_e[7,]<-exp_fun(0.04, 0.285, 6)
+p1_e[8,]<-exp_fun(0.04, 0.285, 7)
+p1_e[9,]<-exp_fun(0.04, 0.285, 8)
+p1_e[10,]<-exp_fun(0.04, 0.285, 9)
+
+
+cause_tab[, 2]<- p1_e
+
+### Sequence of Prevalences of p2s
+### Note here 0.4 hard coded as the prevalence of p4s
+p2_e<-.4-p1_e
+cause_tab[, 3]<- p2_e
+
+### Estimating the RR and OR
+cause_tab[, 4]<- rr_e<-risk_r(p1_e, p2_e)
+cause_tab[, 5]<- or_e<-or_(p1_e, p2_e)
+
+#---------------------------------------------#
+#                                             #
+#                 CAUSES OF D                 #
+#                                             #
+#---------------------------------------------#
+
+### Arbitrary selection of the pr of p1 (0.05) and p2s (0.25)
+cause_tab[, 6]<- rep(c(.05))
+cause_tab[, 7]<- rep(c(.25))
+cause_tab[, 8]<- risk_r(.05, 0.25)
+cause_tab[, 9]<- or_(.05, 0.25)
+
+
+colnames(cause_tab)<-c("year", "p1_for_E", "p2_for_E", "RR_E", "OR_E", "p1_for_D", "p2_for_D", "RR_D", "OR_D")
+
+pander(cause_tab, caption = "Causes (p1s and p2s) of E and D at each T=t and their expected magnitude of effect")
+```
+
+## Simulating First Scenario
+
+### Simulating C and setting the parameters to estimate the probability of E and D
+
+```{r first scenario v1, echo = T}
+
+#---------------------------------------------#
+#                                             #
+#             SIMULATING THE DATA             #
+#                                             #
+#---------------------------------------------#
+
+set.seed(1234)
+df<-data.frame(rep(c(2009:2018), each=1000)) ## this variable is an indicator of calendar year, 2008 - 2018.
+colnames(df)<-"year"
+
+#---------------------------------------------#
+#                                             #
+#        SIMULATING THE CONFOUNDER            #
+#                                             #
+#---------------------------------------------#
+
+# We randomly "sprinkle down" the confounder over the population
+df$confounder<-rbinom(nrow(df), 1, .2)
+#df<-df[order(df$year,df$confounder), ]
+
+#---------------------------------------------#
+#                                             #
+#           SETTING THE PARAMETERS            #
+#                                             #
+#---------------------------------------------#
+
+
+betas_gammas<- data.frame(cause_tab$year)
+colnames(betas_gammas)<-"year"
+betas_gammas$g0_for_E<- ln_odds(cause_tab$p1_for_E)
+betas_gammas$g1_for_E<- log(cause_tab$OR_E)
+betas_gammas$b0_for_D<- ln_odds(cause_tab$p1_for_D)
+betas_gammas$b1_for_D<- log(cause_tab$OR_D)
+
+pander(betas_gammas, caption = "Parameters that we are going to use for the first simulation")
+```
+
+### Simulating E and D
+We are going to simulate the exposure (E) and the disease (D) by with probability p (p_exposure and p_disease, respectively). Let E and D be Uniform(0,1) random variables. We can write the exposure and disease random variables as:
+
+E = 1 U < p_exposure
+E = 0 U >= p_exposure
+
+D = 1 U < p_disease
+D = 0 U < p_disease
+
+Therefore, E and D have a Bernoulli (p) distribution.
+
+```{r, echo = T}
+#---------------------------------------------#
+#                                             #
+#           SIMULATING THE EXPOSURE           #
+#                                             #
+#---------------------------------------------#
+
+### Probability of E
+# df$p_exposure[df$year==2009]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2009], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2009], 
+#                                     df$confounder[df$year==2009])
+# df$p_exposure[df$year==2010]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2010], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2010], 
+#                                     df$confounder[df$year==2010])
+# df$p_exposure[df$year==2011]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2011], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2011], 
+#                                     df$confounder[df$year==2011])
+# df$p_exposure[df$year==2012]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2012], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2012], 
+#                                     df$confounder[df$year==2012])
+# df$p_exposure[df$year==2013]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2013], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2013], 
+#                                     df$confounder[df$year==2013])
+# df$p_exposure[df$year==2014]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2014], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2014], 
+#                                     df$confounder[df$year==2014])
+# df$p_exposure[df$year==2015]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2015], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2015], 
+#                                     df$confounder[df$year==2015])
+# df$p_exposure[df$year==2016]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2016], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2016], 
+#                                     df$confounder[df$year==2016])
+# df$p_exposure[df$year==2017]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2017], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2017], 
+#                                     df$confounder[df$year==2017])
+# df$p_exposure[df$year==2018]<-logit(betas_gammas$g0_for_E[betas_gammas$year==2018], 
+#                                     betas_gammas$g1_for_E[betas_gammas$year==2018], 
+#                                     df$confounder[df$year==2018])
+
+for(i in unique(df$year)){
+  df$p_exposure[df$year==i]<-logit(betas_gammas$g0_for_E[betas_gammas$year==i], betas_gammas$g1_for_E[betas_gammas$year==i], 
+                                   df$confounder[df$year==i])
+}
+
+
+### SIMULATING E
+df$exposure<-rbinom(nrow(df), 1, pr=df$p_exposure)
+df<-df[order(df$year, df$confounder, df$exposure), ]
+
+#---------------------------------------------#
+#                                             #
+#           SIMULATING THE DISEASE            #
+#                                             #
+#---------------------------------------------#
+
+## Probability of D
+for(i in unique(df$year)){
+ df$p_disease[df$year==i]<-logit(betas_gammas$b0_for_D[betas_gammas$year==i], betas_gammas$b1_for_D[betas_gammas$year==i], df$confounder[df$year==i])
+}
+
+## Simulating D
+df$disease<-rbinom(nrow(df), 1, pr=df$p_disease)
+```
+
+
+```{r, }
+tab_p<-cbind(mean(df$confounder), mean(df$exposure), mean(df$disease))
+colnames(tab_p)<-c("Pr_C", "Pr_E", "Pr_D")
+pander(tab_p, caption = "Overall Prevalence of C, E, and D in our simulated data")
+
+tab_p_y<-aggregate(df[, c(2, 4, 6)], list(df$year), mean)
+pander(tab_p_y, caption = "Prevalence of C, E, and D by year in our simulated data")
+
+df.plot<-tab_p_y[, 1:2]
+df.plot[11:20, ]<-tab_p_y[, c(1, 3)]
+df.plot[21:30, ]<-tab_p_y[, c(1, 4)]
+df.plot[, 3]<-rep(c("confounder", "exposure", "disease"), each=10)
+colnames(df.plot)<-c("year", "prob", "variable")
+
+ggplot(data = df.plot, 
+       aes(x = as.numeric(year),
+           y = prob, 
+           col = variable, 
+           shape = variable, 
+           linetype = variable)) + 
+  geom_line(size = 1.1) + 
+  xlab(" ") + 
+  ylab("%") + 
+  geom_point(size = 2.5) +
+  theme(panel.grid.minor = element_blank( ), 
+        panel.grid.major = element_blank( ), 
+        panel.background = element_rect(fill="white", 
+                                        colour="grey50"), 
+        legend.title = element_blank( ),
+        legend.position = "bottom") +
+  scale_x_continuous(breaks = seq(2009, 2018 , 1), 
+                     labels = c("2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018")) + 
+  labs(title = "Prevalences of C, E, and D in our simulated dataset at each T = t")
+```
+
+```{r, }
+model_crude<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data = df)
+model_crude2<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data = df)
+model_crude3<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data = df)
+
+model_or<-round(exp(model_crude$coefficients), 2)
+model_ci<-round(exp(confint(model_crude)), 2)
+model_crude.df<-data.frame(cbind(model_or, model_ci))[2, ]
+model_crude.df[2, ]<-cbind(round(exp(model_crude2$coefficients), 2), round(exp(confint(model_crude2)), 2))[2, ]
+model_crude.df[3, ]<-cbind(round(exp(model_crude3$coefficients), 2), round(exp(confint(model_crude3)), 2))[2, ]
+model_crude.df[, 4]<-factor(c(1:3), labels = c("OR D | E", "OR E | C", "OR D | C"))
+rownames(model_crude.df)<-1:3
+model_crude.df<-model_crude.df[, c(4, 1, 2, 3)]
+colnames(model_crude.df)<-c("Estimand","OR", "LB_95CI", "UB_95CI")
+pander(model_crude.df, caption = "Overall effects (OR) in our simulated data")
+
+```
+
+```{r, }
+model_crude_09<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2009))
+model_crude_10<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2010))
+model_crude_11<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2011))
+model_crude_12<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2012))
+model_crude_13<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2013))
+model_crude_14<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2014))
+model_crude_15<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2015))
+model_crude_16<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2016))
+model_crude_17<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2017))
+model_crude_18<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df, year==2018))
+
+model_crude.df2<-data.frame(cbind(round(exp(model_crude_09$coefficients), 2), round(exp(confint(model_crude_09)), 2)))[2, ]
+model_crude.df2[2, ]<-cbind(round(exp(model_crude_10$coefficients), 2), round(exp(confint(model_crude_10)), 2))[2, ]
+model_crude.df2[3, ]<-cbind(round(exp(model_crude_11$coefficients), 2), round(exp(confint(model_crude_11)), 2))[2, ]
+model_crude.df2[4, ]<-cbind(round(exp(model_crude_12$coefficients), 2), round(exp(confint(model_crude_12)), 2))[2, ]
+model_crude.df2[5, ]<-cbind(round(exp(model_crude_13$coefficients), 2), round(exp(confint(model_crude_13)), 2))[2, ]
+model_crude.df2[6, ]<-cbind(round(exp(model_crude_14$coefficients), 2), round(exp(confint(model_crude_14)), 2))[2, ]
+model_crude.df2[7, ]<-cbind(round(exp(model_crude_15$coefficients), 2), round(exp(confint(model_crude_15)), 2))[2, ]
+model_crude.df2[8, ]<-cbind(round(exp(model_crude_16$coefficients), 2), round(exp(confint(model_crude_16)), 2))[2, ]
+model_crude.df2[9, ]<-cbind(round(exp(model_crude_17$coefficients), 2), round(exp(confint(model_crude_17)), 2))[2, ]
+model_crude.df2[10, ]<-cbind(round(exp(model_crude_18$coefficients), 2), round(exp(confint(model_crude_18)), 2))[2, ]
+model_crude.df2[, 4]<-factor(1:10, labels = c("2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018"))
+model_crude.df2<-model_crude.df2[, c(4, 1, 2, 3)]
+rownames(model_crude.df2)<-1:10
+
+model_crude2_09<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2009))
+model_crude2_10<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2010))
+model_crude2_11<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2011))
+model_crude2_12<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2012))
+model_crude2_13<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2013))
+model_crude2_14<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2014))
+model_crude2_15<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2015))
+model_crude2_16<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2016))
+model_crude2_17<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2017))
+model_crude2_18<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2018))
+
+model_crude.df3<-data.frame(cbind(round(exp(model_crude2_09$coefficients), 2), round(exp(confint(model_crude2_09)), 2)))[2, ]
+model_crude.df3[2, ]<-cbind(round(exp(model_crude2_10$coefficients), 2), round(exp(confint(model_crude2_10)), 2))[2, ]
+model_crude.df3[3, ]<-cbind(round(exp(model_crude2_11$coefficients), 2), round(exp(confint(model_crude2_11)), 2))[2, ]
+model_crude.df3[4, ]<-cbind(round(exp(model_crude2_12$coefficients), 2), round(exp(confint(model_crude2_12)), 2))[2, ]
+model_crude.df3[5, ]<-cbind(round(exp(model_crude2_13$coefficients), 2), round(exp(confint(model_crude2_13)), 2))[2, ]
+model_crude.df3[6, ]<-cbind(round(exp(model_crude2_14$coefficients), 2), round(exp(confint(model_crude2_14)), 2))[2, ]
+model_crude.df3[7, ]<-cbind(round(exp(model_crude2_15$coefficients), 2), round(exp(confint(model_crude2_15)), 2))[2, ]
+model_crude.df3[8, ]<-cbind(round(exp(model_crude2_16$coefficients), 2), round(exp(confint(model_crude2_16)), 2))[2, ]
+model_crude.df3[9, ]<-cbind(round(exp(model_crude2_17$coefficients), 2), round(exp(confint(model_crude2_17)), 2))[2, ]
+model_crude.df3[10, ]<-cbind(round(exp(model_crude2_18$coefficients), 2), round(exp(confint(model_crude2_18)), 2))[2, ]
+rownames(model_crude.df3)<-1:10
+
+
+model_crude3_09<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2009))
+model_crude3_10<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2010))
+model_crude3_11<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2011))
+model_crude3_12<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2012))
+model_crude3_13<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2013))
+model_crude3_14<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2014))
+model_crude3_15<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2015))
+model_crude3_16<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2016))
+model_crude3_17<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2017))
+model_crude3_18<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2018))
+
+model_crude.df4<-data.frame(cbind(round(exp(model_crude3_09$coefficients), 2), round(exp(confint(model_crude3_09)), 2)))[2, ]
+model_crude.df4[2, ]<-cbind(round(exp(model_crude3_10$coefficients), 2), round(exp(confint(model_crude3_10)), 2))[2, ]
+model_crude.df4[3, ]<-cbind(round(exp(model_crude3_11$coefficients), 2), round(exp(confint(model_crude3_11)), 2))[2, ]
+model_crude.df4[4, ]<-cbind(round(exp(model_crude3_12$coefficients), 2), round(exp(confint(model_crude3_12)), 2))[2, ]
+model_crude.df4[5, ]<-cbind(round(exp(model_crude3_13$coefficients), 2), round(exp(confint(model_crude3_13)), 2))[2, ]
+model_crude.df4[6, ]<-cbind(round(exp(model_crude3_14$coefficients), 2), round(exp(confint(model_crude3_14)), 2))[2, ]
+model_crude.df4[7, ]<-cbind(round(exp(model_crude3_15$coefficients), 2), round(exp(confint(model_crude3_15)), 2))[2, ]
+model_crude.df4[8, ]<-cbind(round(exp(model_crude3_16$coefficients), 2), round(exp(confint(model_crude3_16)), 2))[2, ]
+model_crude.df4[9, ]<-cbind(round(exp(model_crude3_17$coefficients), 2), round(exp(confint(model_crude3_17)), 2))[2, ]
+model_crude.df4[10, ]<-cbind(round(exp(model_crude3_18$coefficients), 2), round(exp(confint(model_crude3_18)), 2))[2, ]
+rownames(model_crude.df4)<-1:10
+
+
+model_crude.yr<-cbind(model_crude.df2, model_crude.df3, model_crude.df4)
+
+colnames(model_crude.yr)<-c("year", "OR_D_|_E", "LB_CI", "UB_CI", "OR_E_|_C", "LB_CI", "UB_CI", "OR_D_|_C", "LB_CI", "UB_CI")
+pander(model_crude.yr, caption = "Crude estimates (ORs) at each T=t in our simulated data")
+
+```
+
+#### SECOND SCENARIO RULES
+- Rule 1: The confounder (C) has a constant prevalence at each t in the whole population
+
+- Rule 2: C causes D and E
+
+- Rule 3: No change in the prevalence of the causes of E
+
+- Rule 4: We are assuming monotonicity for causes of E, C, D
+
+- Rule 5: We are holding p4 for E constant at 0.60
+
+- Rule 6: We are holding p4 for D constant at 0.70
+
+- Rule 7: The source of doomedness for D increases at each t such that the proportion of doom for D (p1) increases at each t. 
+
+- Rule 8: E does not cause D
+
+```{r, }
+#---------------------------------------------#
+#                                             #
+#                 CAUSES OF E                 #
+#                                             #
+#---------------------------------------------#
+cause_tab2<-data.frame(matrix(NA, nrow=10, ncol=1))
+cause_tab2[, 1]<-2009:2018
+
+### Arbitrary selection of the pr of p1s (0.04) and p2s (0.36)
+cause_tab2[, 2]<- rep(c(.04))
+cause_tab2[, 3]<- rep(c(.36))
+cause_tab2[, 4]<- risk_r(.04, 0.36)
+cause_tab2[, 5]<- or_(.04, 0.36)
+
+
+#---------------------------------------------#
+#                                             #
+#                 CAUSES OF D                 #
+#                                             #
+#---------------------------------------------#
+
+p1_d<-data.frame(matrix(NA, nrow=10, ncol=1))
+p1_d[1,]<-exp_fun(0.05, 0.285, 0)
+p1_d[2,]<-exp_fun(0.05, 0.285, 1)
+p1_d[3,]<-exp_fun(0.05, 0.285, 2)
+p1_d[4,]<-exp_fun(0.05, 0.285, 3)
+p1_d[5,]<-exp_fun(0.05, 0.285, 4)
+p1_d[6,]<-exp_fun(0.05, 0.285, 5)
+p1_d[7,]<-exp_fun(0.05, 0.285, 6)
+p1_d[8,]<-exp_fun(0.05, 0.285, 7)
+p1_d[9,]<-0.2892623
+p1_d[10,]<-0.2892623
+
+
+cause_tab2[, 6]<- p1_d
+
+### Sequence of Prevalences of p2s
+### Note here 0.7 hard coded as the prevalence of p4s
+p2_d<-.3-p1_d
+cause_tab2[, 7]<- p2_d
+
+### Estimating the RR and OR
+cause_tab2[, 8]<- rr_d<-risk_r(p1_d, p2_d)
+cause_tab2[, 9]<- or_d<-or_(p1_d, p2_d)
+
+colnames(cause_tab2)<-c("year", "p1_for_E", "p2_for_E", "RR_E", "OR_E", "p1_for_D", "p2_for_D", "RR_D", "OR_D")
+
+pander(cause_tab2, caption = "Causes (p1s and p2s) of E and D at each T=t and their expected magnitude of effect")
+```
+
+
+```{r, }
+#---------------------------------------------#
+#                                             #
+#             SIMULATING THE DATA             #
+#                                             #
+#---------------------------------------------#
+
+set.seed(1234)
+df2<-data.frame(rep(c(2009:2018), each=1000)) ## this variable is an indicator of calendar year, 2008 - 2018.
+colnames(df2)<-"year"
+
+#---------------------------------------------#
+#                                             #
+#        SIMULATING THE CONFOUNDER            #
+#                                             #
+#---------------------------------------------#
+
+# We randomly "sprinkle down" the confounder over the population
+df2$confounder<-rbinom(nrow(df2), 1, .2)
+#df2<-df[order(df$year,df$confounder), ]
+
+#---------------------------------------------#
+#                                             #
+#           SETTING THE PARAMETERS            #
+#                                             #
+#---------------------------------------------#
+
+
+betas_gammas2<- data.frame(cause_tab2$year)
+colnames(betas_gammas2)<-"year"
+betas_gammas2$g0_for_E<- ln_odds(cause_tab2$p1_for_E)
+betas_gammas2$g1_for_E<- log(cause_tab2$OR_E)
+betas_gammas2$b0_for_D<- ln_odds(cause_tab2$p1_for_D)
+betas_gammas2$b1_for_D<- log(cause_tab2$OR_D)
+
+pander(betas_gammas2, caption = "Parameters that we are going to use for the second simulation")
+```
+
+```{r, echo = T}
+#---------------------------------------------#
+#                                             #
+#           SIMULATING THE EXPOSURE           #
+#                                             #
+#---------------------------------------------#
+
+### Probability of E
+for(i in unique(df2$year)){
+  df2$p_exposure[df2$year==i]<-logit(betas_gammas2$g0_for_E[betas_gammas2$year==i], betas_gammas2$g1_for_E[betas_gammas2$year==i], 
+                                   df2$confounder[df2$year==i])
+}
+
+
+### SIMULATING E
+df2$exposure<-rbinom(nrow(df2), 1, pr=df2$p_exposure)
+df2<-df2[order(df2$year, df2$confounder, df2$exposure), ]
+
+#---------------------------------------------#
+#                                             #
+#           SIMULATING THE DISEASE            #
+#                                             #
+#---------------------------------------------#
+
+## Probability of D
+for(i in unique(df2$year)){
+ df2$p_disease[df2$year==i]<-logit(betas_gammas2$b0_for_D[betas_gammas2$year==i], betas_gammas2$b1_for_D[betas_gammas2$year==i], df2$confounder[df2$year==i])
+}
+
+## Simulating D
+df2$disease<-rbinom(nrow(df2), 1, pr=df2$p_disease)
+```
+
+
+```{r, }
+tab_p2<-cbind(mean(df2$confounder), mean(df2$exposure), mean(df2$disease))
+colnames(tab_p2)<-c("Pr_C", "Pr_E", "Pr_D")
+pander(tab_p2, caption = "Overall Prevalence of C, E, and D in our simulated data for Scenario 2")
+
+tab_p_y2<-aggregate(df2[, c(2, 4, 6)], list(df2$year), mean)
+pander(tab_p_y2, caption = "Prevalence of C, E, and D by year in our simulated data for Scenario 2")
+
+df.plot2<-tab_p_y2[, 1:2]
+df.plot2[11:20, ]<-tab_p_y2[, c(1, 3)]
+df.plot2[21:30, ]<-tab_p_y2[, c(1, 4)]
+df.plot2[, 3]<-rep(c("confounder", "exposure", "disease"), each=10)
+colnames(df.plot2)<-c("year", "prob", "variable")
+
+ggplot(data = df.plot2, 
+       aes(x = as.numeric(year),
+           y = prob, 
+           col = variable, 
+           shape = variable, 
+           linetype = variable)) + 
+  geom_line(size = 1.1) + 
+  xlab(" ") + 
+  ylab("%") + 
+  geom_point(size = 2.5) +
+  theme(panel.grid.minor = element_blank( ), 
+        panel.grid.major = element_blank( ), 
+        panel.background = element_rect(fill="white", 
+                                        colour="grey50"), 
+        legend.title = element_blank( ),
+        legend.position = "bottom") +
+  scale_x_continuous(breaks = seq(2009, 2018 , 1), 
+                     labels = c("2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018")) + 
+  labs(title = "Prevalences of C, E, and D in our second simulated dataset at each T = t")
+```
+
+```{r, }
+s2_model_crude<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data = df2)
+s2_model_crude2<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data = df2)
+s2_model_crude3<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data = df2)
+
+s2_model_or<-round(exp(s2_model_crude$coefficients), 2)
+s2_model_ci<-round(exp(confint(s2_model_crude)), 2)
+s2_model_crude.df<-data.frame(cbind(s2_model_or, s2_model_ci))[2, ]
+s2_model_crude.df[2, ]<-cbind(round(exp(s2_model_crude2$coefficients), 2), round(exp(confint(s2_model_crude2)), 2))[2, ]
+s2_model_crude.df[3, ]<-cbind(round(exp(s2_model_crude3$coefficients), 2), round(exp(confint(s2_model_crude3)), 2))[2, ]
+s2_model_crude.df[, 4]<-factor(c(1:3), labels = c("OR D | E", "OR E | C", "OR D | C"))
+rownames(s2_model_crude.df)<-1:3
+s2_model_crude.df<-s2_model_crude.df[, c(4, 1, 2, 3)]
+colnames(s2_model_crude.df)<-c("Estimand","OR", "LB_95CI", "UB_95CI")
+pander(s2_model_crude.df, caption = "Overall effects (OR) in our simulated data for scenario 2")
+
+```
+
+```{r, }
+s2_model_crude_09<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2009))
+s2_model_crude_10<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2010))
+s2_model_crude_11<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2011))
+s2_model_crude_12<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2012))
+s2_model_crude_13<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2013))
+s2_model_crude_14<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2014))
+s2_model_crude_15<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2015))
+s2_model_crude_16<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2016))
+s2_model_crude_17<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2017))
+s2_model_crude_18<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df2, year==2018))
+
+s2_model_crude.df2<-data.frame(cbind(round(exp(s2_model_crude_09$coefficients), 2), round(exp(confint(s2_model_crude_09)), 2)))[2, ]
+s2_model_crude.df2[2, ]<-cbind(round(exp(s2_model_crude_10$coefficients), 2), round(exp(confint(s2_model_crude_10)), 2))[2, ]
+s2_model_crude.df2[3, ]<-cbind(round(exp(s2_model_crude_11$coefficients), 2), round(exp(confint(s2_model_crude_11)), 2))[2, ]
+s2_model_crude.df2[4, ]<-cbind(round(exp(s2_model_crude_12$coefficients), 2), round(exp(confint(s2_model_crude_12)), 2))[2, ]
+s2_model_crude.df2[5, ]<-cbind(round(exp(s2_model_crude_13$coefficients), 2), round(exp(confint(s2_model_crude_13)), 2))[2, ]
+s2_model_crude.df2[6, ]<-cbind(round(exp(s2_model_crude_14$coefficients), 2), round(exp(confint(s2_model_crude_14)), 2))[2, ]
+s2_model_crude.df2[7, ]<-cbind(round(exp(s2_model_crude_15$coefficients), 2), round(exp(confint(s2_model_crude_15)), 2))[2, ]
+s2_model_crude.df2[8, ]<-cbind(round(exp(s2_model_crude_16$coefficients), 2), round(exp(confint(s2_model_crude_16)), 2))[2, ]
+s2_model_crude.df2[9, ]<-cbind(round(exp(s2_model_crude_17$coefficients), 2), round(exp(confint(s2_model_crude_17)), 2))[2, ]
+s2_model_crude.df2[10, ]<-cbind(round(exp(s2_model_crude_18$coefficients), 2), round(exp(confint(s2_model_crude_18)), 2))[2, ]
+s2_model_crude.df2[, 4]<-factor(1:10, labels = c("2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018"))
+s2_model_crude.df2<-s2_model_crude.df2[, c(4, 1, 2, 3)]
+rownames(s2_model_crude.df2)<-1:10
+
+s2_model_crude2_09<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2009))
+s2_model_crude2_10<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2010))
+s2_model_crude2_11<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2011))
+s2_model_crude2_12<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2012))
+s2_model_crude2_13<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2013))
+s2_model_crude2_14<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2014))
+s2_model_crude2_15<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2015))
+s2_model_crude2_16<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2016))
+s2_model_crude2_17<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2017))
+s2_model_crude2_18<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2018))
+
+s2_model_crude.df3<-data.frame(cbind(round(exp(s2_model_crude2_09$coefficients), 2), round(exp(confint(s2_model_crude2_09)), 2)))[2, ]
+s2_model_crude.df3[2, ]<-cbind(round(exp(s2_model_crude2_10$coefficients), 2), round(exp(confint(s2_model_crude2_10)), 2))[2, ]
+s2_model_crude.df3[3, ]<-cbind(round(exp(s2_model_crude2_11$coefficients), 2), round(exp(confint(s2_model_crude2_11)), 2))[2, ]
+s2_model_crude.df3[4, ]<-cbind(round(exp(s2_model_crude2_12$coefficients), 2), round(exp(confint(s2_model_crude2_12)), 2))[2, ]
+s2_model_crude.df3[5, ]<-cbind(round(exp(s2_model_crude2_13$coefficients), 2), round(exp(confint(s2_model_crude2_13)), 2))[2, ]
+s2_model_crude.df3[6, ]<-cbind(round(exp(s2_model_crude2_14$coefficients), 2), round(exp(confint(s2_model_crude2_14)), 2))[2, ]
+s2_model_crude.df3[7, ]<-cbind(round(exp(s2_model_crude2_15$coefficients), 2), round(exp(confint(s2_model_crude2_15)), 2))[2, ]
+s2_model_crude.df3[8, ]<-cbind(round(exp(s2_model_crude2_16$coefficients), 2), round(exp(confint(s2_model_crude2_16)), 2))[2, ]
+s2_model_crude.df3[9, ]<-cbind(round(exp(s2_model_crude2_17$coefficients), 2), round(exp(confint(s2_model_crude2_17)), 2))[2, ]
+s2_model_crude.df3[10, ]<-cbind(round(exp(s2_model_crude2_18$coefficients), 2), round(exp(confint(s2_model_crude2_18)), 2))[2, ]
+rownames(s2_model_crude.df3)<-1:10
+
+
+s2_model_crude3_09<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2009))
+s2_model_crude3_10<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2010))
+s2_model_crude3_11<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2011))
+s2_model_crude3_12<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2012))
+s2_model_crude3_13<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2013))
+s2_model_crude3_14<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2014))
+s2_model_crude3_15<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2015))
+s2_model_crude3_16<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2016))
+s2_model_crude3_17<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2017))
+s2_model_crude3_18<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2018))
+
+s2_model_crude.df4<-data.frame(cbind(round(exp(s2_model_crude3_09$coefficients), 2), round(exp(confint(s2_model_crude3_09)), 2)))[2, ]
+s2_model_crude.df4[2, ]<-cbind(round(exp(s2_model_crude3_10$coefficients), 2), round(exp(confint(s2_model_crude3_10)), 2))[2, ]
+s2_model_crude.df4[3, ]<-cbind(round(exp(s2_model_crude3_11$coefficients), 2), round(exp(confint(s2_model_crude3_11)), 2))[2, ]
+s2_model_crude.df4[4, ]<-cbind(round(exp(s2_model_crude3_12$coefficients), 2), round(exp(confint(s2_model_crude3_12)), 2))[2, ]
+s2_model_crude.df4[5, ]<-cbind(round(exp(s2_model_crude3_13$coefficients), 2), round(exp(confint(s2_model_crude3_13)), 2))[2, ]
+s2_model_crude.df4[6, ]<-cbind(round(exp(s2_model_crude3_14$coefficients), 2), round(exp(confint(s2_model_crude3_14)), 2))[2, ]
+s2_model_crude.df4[7, ]<-cbind(round(exp(s2_model_crude3_15$coefficients), 2), round(exp(confint(s2_model_crude3_15)), 2))[2, ]
+s2_model_crude.df4[8, ]<-cbind(round(exp(s2_model_crude3_16$coefficients), 2), round(exp(confint(s2_model_crude3_16)), 2))[2, ]
+s2_model_crude.df4[9, ]<-cbind(round(exp(s2_model_crude3_17$coefficients), 2), round(exp(confint(s2_model_crude3_17)), 2))[2, ]
+s2_model_crude.df4[10, ]<-cbind(round(exp(s2_model_crude3_18$coefficients), 2), round(exp(confint(s2_model_crude3_18)), 2))[2, ]
+rownames(s2_model_crude.df4)<-1:10
+
+
+s2_model_crude.yr<-cbind(s2_model_crude.df2, s2_model_crude.df3, s2_model_crude.df4)
+
+colnames(s2_model_crude.yr)<-c("year", "OR_D_|_E", "LB_CI", "UB_CI", "OR_E_|_C", "LB_CI", "UB_CI", "OR_D_|_C", "LB_CI", "UB_CI")
+pander(s2_model_crude.yr, caption = "Crude estimates (ORs) at each T=t in our simulated data")
+
+```
+
+#### THIRD SCENARIO RULES
+- Rule 1: The confounder (C) has a constant prevalence at each t in the whole population
+
+- Rule 2: C causes D and E
+
+- Rule 3: We are assuming monotonicity for causes of E, C, D
+
+- Rule 4: We are holding p4 for E constant at 0.60
+
+- Rule 5: We are holding p4 for D constant at 0.70
+
+- Rule 6: The source of doomedness for both E and D increase at each t such that the proportion of doomed for E and D (p1's) increases at each t. 
+
+- Rule 7: E does not cause D
+
+```{r , echo = F}
+
+#---------------------------------------------#
+#                                             #
+#                 CAUSES OF E                 #
+#                                             #
+#---------------------------------------------#
+cause_tab3<-data.frame(matrix(NA, nrow=10, ncol=1))
+cause_tab3[, 1]<-2009:2018
+
+p1_e<-data.frame(matrix(NA, nrow=10, ncol=1))
+p1_e[1,]<-exp_fun(0.04, 0.285, 0)
+p1_e[2,]<-exp_fun(0.04, 0.285, 1)
+p1_e[3,]<-exp_fun(0.04, 0.285, 2)
+p1_e[4,]<-exp_fun(0.04, 0.285, 3)
+p1_e[5,]<-exp_fun(0.04, 0.285, 4)
+p1_e[6,]<-exp_fun(0.04, 0.285, 5)
+p1_e[7,]<-exp_fun(0.04, 0.285, 6)
+p1_e[8,]<-exp_fun(0.04, 0.285, 7)
+p1_e[9,]<-exp_fun(0.04, 0.285, 8)
+p1_e[10,]<-exp_fun(0.04, 0.285, 9)
+
+
+cause_tab3[, 2]<- p1_e
+
+### Sequence of Prevalences of p2s
+### Note here 0.4 hard coded as the prevalence of p4s
+p2_e<-.4-p1_e
+cause_tab3[, 3]<- p2_e
+
+### Estimating the RR and OR
+cause_tab3[, 4]<- rr_e<-risk_r(p1_e, p2_e)
+cause_tab3[, 5]<- or_e<-or_(p1_e, p2_e)
+
+#---------------------------------------------#
+#                                             #
+#                 CAUSES OF D                 #
+#                                             #
+#---------------------------------------------#
+
+p1_d<-data.frame(matrix(NA, nrow=10, ncol=1))
+p1_d[1,]<-exp_fun(0.05, 0.285, 0)
+p1_d[2,]<-exp_fun(0.05, 0.285, 1)
+p1_d[3,]<-exp_fun(0.05, 0.285, 2)
+p1_d[4,]<-exp_fun(0.05, 0.285, 3)
+p1_d[5,]<-exp_fun(0.05, 0.285, 4)
+p1_d[6,]<-exp_fun(0.05, 0.285, 5)
+p1_d[7,]<-exp_fun(0.05, 0.285, 6)
+p1_d[8,]<-exp_fun(0.05, 0.285, 7)
+p1_d[9,]<-0.2892623
+p1_d[10,]<-0.2892623
+
+
+cause_tab3[, 6]<- p1_d
+
+### Sequence of Prevalences of p2s
+### Note here 0.7 hard coded as the prevalence of p4s
+p2_d<-.3-p1_d
+cause_tab3[, 7]<- p2_d
+
+### Estimating the RR and OR
+cause_tab3[, 8]<- rr_d<-risk_r(p1_d, p2_d)
+cause_tab3[, 9]<- or_d<-or_(p1_d, p2_d)
+
+colnames(cause_tab3)<-c("year", "p1_for_E", "p2_for_E", "RR_E", "OR_E", "p1_for_D", "p2_for_D", "RR_D", "OR_D")
+
+pander(cause_tab3, caption = "Causes (p1s and p2s) of E and D at each T=t and their expected magnitude of effect")
+```
+
+```{r, }
+#---------------------------------------------#
+#                                             #
+#             SIMULATING THE DATA             #
+#                                             #
+#---------------------------------------------#
+
+set.seed(1234)
+df3<-data.frame(rep(c(2009:2018), each=1000)) ## this variable is an indicator of calendar year, 2008 - 2018.
+colnames(df3)<-"year"
+
+#---------------------------------------------#
+#                                             #
+#        SIMULATING THE CONFOUNDER            #
+#                                             #
+#---------------------------------------------#
+
+# We randomly "sprinkle down" the confounder over the population
+df3$confounder<-rbinom(nrow(df3), 1, .2)
+#df2<-df[order(df$year,df$confounder), ]
+
+#---------------------------------------------#
+#                                             #
+#           SETTING THE PARAMETERS            #
+#                                             #
+#---------------------------------------------#
+
+
+betas_gammas3<- data.frame(cause_tab3$year)
+colnames(betas_gammas3)<-"year"
+betas_gammas3$g0_for_E<- ln_odds(cause_tab3$p1_for_E)
+betas_gammas3$g1_for_E<- log(cause_tab3$OR_E)
+betas_gammas3$b0_for_D<- ln_odds(cause_tab3$p1_for_D)
+betas_gammas3$b1_for_D<- log(cause_tab3$OR_D)
+
+pander(betas_gammas3, caption = "Parameters that we are going to use for the third simulation")
+```
+
+```{r, echo = T}
+#---------------------------------------------#
+#                                             #
+#           SIMULATING THE EXPOSURE           #
+#                                             #
+#---------------------------------------------#
+
+### Probability of E
+for(i in unique(df3$year)){
+  df3$p_exposure[df3$year==i]<-logit(betas_gammas3$g0_for_E[betas_gammas3$year==i], betas_gammas3$g1_for_E[betas_gammas3$year==i], 
+                                   df3$confounder[df3$year==i])
+}
+
+
+### SIMULATING E
+df3$exposure<-rbinom(nrow(df3), 1, pr=df3$p_exposure)
+df3<-df3[order(df3$year, df3$confounder, df3$exposure), ]
+
+#---------------------------------------------#
+#                                             #
+#           SIMULATING THE DISEASE            #
+#                                             #
+#---------------------------------------------#
+
+## Probability of D
+for(i in unique(df3$year)){
+ df3$p_disease[df3$year==i]<-logit(betas_gammas3$b0_for_D[betas_gammas3$year==i], betas_gammas3$b1_for_D[betas_gammas3$year==i], df3$confounder[df3$year==i])
+}
+
+## Simulating D
+df3$disease<-rbinom(nrow(df3), 1, pr=df3$p_disease)
+```
+
+```{r, }
+tab_p3<-cbind(mean(df3$confounder), mean(df3$exposure), mean(df3$disease))
+colnames(tab_p3)<-c("Pr_C", "Pr_E", "Pr_D")
+pander(tab_p3, caption = "Overall Prevalence of C, E, and D in our simulated data for Scenario 3")
+
+tab_p_y3<-aggregate(df3[, c(2, 4, 6)], list(df3$year), mean)
+pander(tab_p_y3, caption = "Prevalence of C, E, and D by year in our simulated data for Scenario 2")
+
+df.plot3<-tab_p_y3[, 1:2]
+df.plot3[11:20, ]<-tab_p_y3[, c(1, 3)]
+df.plot3[21:30, ]<-tab_p_y3[, c(1, 4)]
+df.plot3[, 3]<-rep(c("confounder", "exposure", "disease"), each=10)
+colnames(df.plot3)<-c("year", "prob", "variable")
+
+ggplot(data = df.plot3, 
+       aes(x = as.numeric(year),
+           y = prob, 
+           col = variable, 
+           shape = variable, 
+           linetype = variable)) + 
+  geom_line(size = 1.1) + 
+  xlab(" ") + 
+  ylab("%") + 
+  geom_point(size = 2.5) +
+  theme(panel.grid.minor = element_blank( ), 
+        panel.grid.major = element_blank( ), 
+        panel.background = element_rect(fill="white", 
+                                        colour="grey50"), 
+        legend.title = element_blank( ),
+        legend.position = "bottom") +
+  scale_x_continuous(breaks = seq(2009, 2018 , 1), 
+                     labels = c("2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018")) + 
+  labs(title = "Prevalences of C, E, and D in our third simulated dataset at each T = t")
+```
+
+```{r, }
+s3_model_crude<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data = df3)
+s3_model_crude2<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data = df3)
+s3_model_crude3<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data = df3)
+
+s3_model_or<-round(exp(s3_model_crude$coefficients), 2)
+s3_model_ci<-round(exp(confint(s3_model_crude)), 2)
+s3_model_crude.df<-data.frame(cbind(s3_model_or, s3_model_ci))[2, ]
+s3_model_crude.df[2, ]<-cbind(round(exp(s3_model_crude2$coefficients), 2), round(exp(confint(s3_model_crude2)), 2))[2, ]
+s3_model_crude.df[3, ]<-cbind(round(exp(s3_model_crude3$coefficients), 2), round(exp(confint(s3_model_crude3)), 2))[2, ]
+s3_model_crude.df[, 4]<-factor(c(1:3), labels = c("OR D | E", "OR E | C", "OR D | C"))
+rownames(s3_model_crude.df)<-1:3
+s3_model_crude.df<-s3_model_crude.df[, c(4, 1, 2, 3)]
+colnames(s3_model_crude.df)<-c("Estimand","OR", "LB_95CI", "UB_95CI")
+pander(s3_model_crude.df, caption = "Overall effects (OR) in our simulated data for scenario 3")
+
+```
+
+```{r, }
+s3_model_crude_09<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2009))
+s3_model_crude_10<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2010))
+s3_model_crude_11<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2011))
+s3_model_crude_12<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2012))
+s3_model_crude_13<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2013))
+s3_model_crude_14<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2014))
+s3_model_crude_15<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2015))
+s3_model_crude_16<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2016))
+s3_model_crude_17<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2017))
+s3_model_crude_18<-glm(as.factor(disease)~as.factor(exposure), family = quasibinomial(link = "logit"), data=subset(df3, year==2018))
+
+s3_model_crude.df2<-data.frame(cbind(round(exp(s3_model_crude_09$coefficients), 2), round(exp(confint(s3_model_crude_09)), 2)))[2, ]
+s3_model_crude.df2[2, ]<-cbind(round(exp(s3_model_crude_10$coefficients), 2), round(exp(confint(s3_model_crude_10)), 2))[2, ]
+s3_model_crude.df2[3, ]<-cbind(round(exp(s3_model_crude_11$coefficients), 2), round(exp(confint(s3_model_crude_11)), 2))[2, ]
+s3_model_crude.df2[4, ]<-cbind(round(exp(s3_model_crude_12$coefficients), 2), round(exp(confint(s3_model_crude_12)), 2))[2, ]
+s3_model_crude.df2[5, ]<-cbind(round(exp(s3_model_crude_13$coefficients), 2), round(exp(confint(s3_model_crude_13)), 2))[2, ]
+s3_model_crude.df2[6, ]<-cbind(round(exp(s3_model_crude_14$coefficients), 2), round(exp(confint(s3_model_crude_14)), 2))[2, ]
+s3_model_crude.df2[7, ]<-cbind(round(exp(s3_model_crude_15$coefficients), 2), round(exp(confint(s3_model_crude_15)), 2))[2, ]
+s3_model_crude.df2[8, ]<-cbind(round(exp(s3_model_crude_16$coefficients), 2), round(exp(confint(s3_model_crude_16)), 2))[2, ]
+s3_model_crude.df2[9, ]<-cbind(round(exp(s3_model_crude_17$coefficients), 2), round(exp(confint(s3_model_crude_17)), 2))[2, ]
+s3_model_crude.df2[10, ]<-cbind(round(exp(s3_model_crude_18$coefficients), 2), round(exp(confint(s3_model_crude_18)), 2))[2, ]
+s3_model_crude.df2[, 4]<-factor(1:10, labels = c("2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018"))
+s3_model_crude.df2<-s3_model_crude.df2[, c(4, 1, 2, 3)]
+rownames(s3_model_crude.df2)<-1:10
+
+s3_model_crude2_09<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2009))
+s3_model_crude2_10<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2010))
+s3_model_crude2_11<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2011))
+s3_model_crude2_12<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2012))
+s3_model_crude2_13<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2013))
+s3_model_crude2_14<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2014))
+s3_model_crude2_15<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2015))
+s3_model_crude2_16<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2016))
+s3_model_crude2_17<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2017))
+s3_model_crude2_18<-glm(as.factor(exposure)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2018))
+
+s3_model_crude.df3<-data.frame(cbind(round(exp(s3_model_crude2_09$coefficients), 2), round(exp(confint(s3_model_crude2_09)), 2)))[2, ]
+s3_model_crude.df3[2, ]<-cbind(round(exp(s3_model_crude2_10$coefficients), 2), round(exp(confint(s3_model_crude2_10)), 2))[2, ]
+s3_model_crude.df3[3, ]<-cbind(round(exp(s3_model_crude2_11$coefficients), 2), round(exp(confint(s3_model_crude2_11)), 2))[2, ]
+s3_model_crude.df3[4, ]<-cbind(round(exp(s3_model_crude2_12$coefficients), 2), round(exp(confint(s3_model_crude2_12)), 2))[2, ]
+s3_model_crude.df3[5, ]<-cbind(round(exp(s3_model_crude2_13$coefficients), 2), round(exp(confint(s3_model_crude2_13)), 2))[2, ]
+s3_model_crude.df3[6, ]<-cbind(round(exp(s3_model_crude2_14$coefficients), 2), round(exp(confint(s3_model_crude2_14)), 2))[2, ]
+s3_model_crude.df3[7, ]<-cbind(round(exp(s3_model_crude2_15$coefficients), 2), round(exp(confint(s3_model_crude2_15)), 2))[2, ]
+s3_model_crude.df3[8, ]<-cbind(round(exp(s3_model_crude2_16$coefficients), 2), round(exp(confint(s3_model_crude2_16)), 2))[2, ]
+s3_model_crude.df3[9, ]<-cbind(round(exp(s3_model_crude2_17$coefficients), 2), round(exp(confint(s3_model_crude2_17)), 2))[2, ]
+s3_model_crude.df3[10, ]<-cbind(round(exp(s3_model_crude2_18$coefficients), 2), round(exp(confint(s3_model_crude2_18)), 2))[2, ]
+rownames(s3_model_crude.df3)<-1:10
+
+
+s3_model_crude3_09<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2009))
+s3_model_crude3_10<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2010))
+s3_model_crude3_11<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2011))
+s3_model_crude3_12<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2012))
+s3_model_crude3_13<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2013))
+s3_model_crude3_14<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2014))
+s3_model_crude3_15<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2015))
+s3_model_crude3_16<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2016))
+s3_model_crude3_17<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2017))
+s3_model_crude3_18<-glm(as.factor(disease)~as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2018))
+
+s3_model_crude.df4<-data.frame(cbind(round(exp(s3_model_crude3_09$coefficients), 2), round(exp(confint(s3_model_crude3_09)), 2)))[2, ]
+s3_model_crude.df4[2, ]<-cbind(round(exp(s3_model_crude3_10$coefficients), 2), round(exp(confint(s3_model_crude3_10)), 2))[2, ]
+s3_model_crude.df4[3, ]<-cbind(round(exp(s3_model_crude3_11$coefficients), 2), round(exp(confint(s3_model_crude3_11)), 2))[2, ]
+s3_model_crude.df4[4, ]<-cbind(round(exp(s3_model_crude3_12$coefficients), 2), round(exp(confint(s3_model_crude3_12)), 2))[2, ]
+s3_model_crude.df4[5, ]<-cbind(round(exp(s3_model_crude3_13$coefficients), 2), round(exp(confint(s3_model_crude3_13)), 2))[2, ]
+s3_model_crude.df4[6, ]<-cbind(round(exp(s3_model_crude3_14$coefficients), 2), round(exp(confint(s3_model_crude3_14)), 2))[2, ]
+s3_model_crude.df4[7, ]<-cbind(round(exp(s3_model_crude3_15$coefficients), 2), round(exp(confint(s3_model_crude3_15)), 2))[2, ]
+s3_model_crude.df4[8, ]<-cbind(round(exp(s3_model_crude3_16$coefficients), 2), round(exp(confint(s3_model_crude3_16)), 2))[2, ]
+s3_model_crude.df4[9, ]<-cbind(round(exp(s3_model_crude3_17$coefficients), 2), round(exp(confint(s3_model_crude3_17)), 2))[2, ]
+s3_model_crude.df4[10, ]<-cbind(round(exp(s3_model_crude3_18$coefficients), 2), round(exp(confint(s3_model_crude3_18)), 2))[2, ]
+rownames(s3_model_crude.df4)<-1:10
+
+
+s3_model_crude.yr<-cbind(s3_model_crude.df2, s3_model_crude.df3, s3_model_crude.df4)
+
+colnames(s3_model_crude.yr)<-c("year", "OR_D_|_E", "LB_CI", "UB_CI", "OR_E_|_C", "LB_CI", "UB_CI", "OR_D_|_C", "LB_CI", "UB_CI")
+pander(s3_model_crude.yr, caption = "Crude estimates (ORs) at each T=t in our simulated data")
+
+```
+
+### ADJUSTING FOR THE CONFOUNDER
+
+Finally, we demonstrate how appropriately controlling for the confounder in our regression models eliminates the issue of artifactual trends.
+
+```{r}
+
+# CONTROLLING FOR THE CONFOUNDER IN SCENARIO 1 #
+model_adj_09<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2009))
+model_adj_10<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2010))
+model_adj_11<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2011))
+model_adj_12<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2012))
+model_adj_13<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2013))
+model_adj_14<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2014))
+model_adj_15<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2015))
+model_adj_16<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2016))
+model_adj_17<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2017))
+model_adj_18<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df, year==2018))
+
+model_adj.df2<-data.frame(cbind(round(exp(model_adj_09$coefficients), 2), round(exp(confint(model_adj_09)), 2)))[2, ]
+model_adj.df2[2, ]<-cbind(round(exp(model_adj_10$coefficients), 2), round(exp(confint(model_adj_10)), 2))[2, ]
+model_adj.df2[3, ]<-cbind(round(exp(model_adj_11$coefficients), 2), round(exp(confint(model_adj_11)), 2))[2, ]
+model_adj.df2[4, ]<-cbind(round(exp(model_adj_12$coefficients), 2), round(exp(confint(model_adj_12)), 2))[2, ]
+model_adj.df2[5, ]<-cbind(round(exp(model_adj_13$coefficients), 2), round(exp(confint(model_adj_13)), 2))[2, ]
+model_adj.df2[6, ]<-cbind(round(exp(model_adj_14$coefficients), 2), round(exp(confint(model_adj_14)), 2))[2, ]
+model_adj.df2[7, ]<-cbind(round(exp(model_adj_15$coefficients), 2), round(exp(confint(model_adj_15)), 2))[2, ]
+model_adj.df2[8, ]<-cbind(round(exp(model_adj_16$coefficients), 2), round(exp(confint(model_adj_16)), 2))[2, ]
+model_adj.df2[9, ]<-cbind(round(exp(model_adj_17$coefficients), 2), round(exp(confint(model_adj_17)), 2))[2, ]
+model_adj.df2[10, ]<-cbind(round(exp(model_adj_18$coefficients), 2), round(exp(confint(model_adj_18)), 2))[2, ]
+model_adj.df2[, 4]<-factor(1:10, labels = c("2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018"))
+model_adj.df2<-model_adj.df2[, c(4, 1, 2, 3)]
+rownames(model_adj.df2)<-1:10
+
+# CONTROLLING FOR THE CONFOUNDER IN SCENARIO 2 #
+
+s2_model_adj_09<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2009))
+s2_model_adj_10<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2010))
+s2_model_adj_11<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2011))
+s2_model_adj_12<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2012))
+s2_model_adj_13<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2013))
+s2_model_adj_14<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2014))
+s2_model_adj_15<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2015))
+s2_model_adj_16<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2016))
+s2_model_adj_17<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2017))
+s2_model_adj_18<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df2, year==2018))
+
+s2_model_adj.df2<-data.frame(cbind(round(exp(s2_model_adj_09$coefficients), 2), round(exp(confint(s2_model_adj_09)), 2)))[2, ]
+s2_model_adj.df2[2, ]<-cbind(round(exp(s2_model_adj_10$coefficients), 2), round(exp(confint(s2_model_adj_10)), 2))[2, ]
+s2_model_adj.df2[3, ]<-cbind(round(exp(s2_model_adj_11$coefficients), 2), round(exp(confint(s2_model_adj_11)), 2))[2, ]
+s2_model_adj.df2[4, ]<-cbind(round(exp(s2_model_adj_12$coefficients), 2), round(exp(confint(s2_model_adj_12)), 2))[2, ]
+s2_model_adj.df2[5, ]<-cbind(round(exp(s2_model_adj_13$coefficients), 2), round(exp(confint(s2_model_adj_13)), 2))[2, ]
+s2_model_adj.df2[6, ]<-cbind(round(exp(s2_model_adj_14$coefficients), 2), round(exp(confint(s2_model_adj_14)), 2))[2, ]
+s2_model_adj.df2[7, ]<-cbind(round(exp(s2_model_adj_15$coefficients), 2), round(exp(confint(s2_model_adj_15)), 2))[2, ]
+s2_model_adj.df2[8, ]<-cbind(round(exp(s2_model_adj_16$coefficients), 2), round(exp(confint(s2_model_adj_16)), 2))[2, ]
+s2_model_adj.df2[9, ]<-cbind(round(exp(s2_model_adj_17$coefficients), 2), round(exp(confint(s2_model_adj_17)), 2))[2, ]
+s2_model_adj.df2[10, ]<-cbind(round(exp(s2_model_adj_18$coefficients), 2), round(exp(confint(s2_model_adj_18)), 2))[2, ]
+rownames(s2_model_adj.df2)<-1:10
+
+# CONTROLLING FOR THE CONFOUNDER IN SCENARIO 3 #
+
+s3_model_adj_09<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2009))
+s3_model_adj_10<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2010))
+s3_model_adj_11<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2011))
+s3_model_adj_12<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2012))
+s3_model_adj_13<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2013))
+s3_model_adj_14<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2014))
+s3_model_adj_15<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2015))
+s3_model_adj_16<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2016))
+s3_model_adj_17<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2017))
+s3_model_adj_18<-glm(as.factor(disease)~as.factor(exposure) + as.factor(confounder), family = quasibinomial(link = "logit"), data=subset(df3, year==2018))
+
+s3_model_adj.df2<-data.frame(cbind(round(exp(s3_model_adj_09$coefficients), 2), round(exp(confint(s3_model_adj_09)), 2)))[2, ]
+s3_model_adj.df2[2, ]<-cbind(round(exp(s3_model_adj_10$coefficients), 2), round(exp(confint(s3_model_adj_10)), 2))[2, ]
+s3_model_adj.df2[3, ]<-cbind(round(exp(s3_model_adj_11$coefficients), 2), round(exp(confint(s3_model_adj_11)), 2))[2, ]
+s3_model_adj.df2[4, ]<-cbind(round(exp(s3_model_adj_12$coefficients), 2), round(exp(confint(s3_model_adj_12)), 2))[2, ]
+s3_model_adj.df2[5, ]<-cbind(round(exp(s3_model_adj_13$coefficients), 2), round(exp(confint(s3_model_adj_13)), 2))[2, ]
+s3_model_adj.df2[6, ]<-cbind(round(exp(s3_model_adj_14$coefficients), 2), round(exp(confint(s3_model_adj_14)), 2))[2, ]
+s3_model_adj.df2[7, ]<-cbind(round(exp(s3_model_adj_15$coefficients), 2), round(exp(confint(s3_model_adj_15)), 2))[2, ]
+s3_model_adj.df2[8, ]<-cbind(round(exp(s3_model_adj_16$coefficients), 2), round(exp(confint(s3_model_adj_16)), 2))[2, ]
+s3_model_adj.df2[9, ]<-cbind(round(exp(s3_model_adj_17$coefficients), 2), round(exp(confint(s3_model_adj_17)), 2))[2, ]
+s3_model_adj.df2[10, ]<-cbind(round(exp(s3_model_adj_18$coefficients), 2), round(exp(confint(s3_model_adj_18)), 2))[2, ]
+rownames(s3_model_adj.df2)<-1:10
+
+all_models_adj.yr<-cbind(model_adj.df2, s2_model_adj.df2, s3_model_adj.df2)
+
+colnames(all_models_adj.yr)<-c("year", "OR_D_|_E Scenario 1", "LB_CI", "UB_CI", "OR_D_|_E Scenario 2", "LB_CI", "UB_CI", "OR_D_|_E Scenario 3", "LB_CI", "UB_CI")
+pander(all_models_adj.yr, caption = "Adjusted estimates (ORs) at each T=t in all simulated datasets")
+```
