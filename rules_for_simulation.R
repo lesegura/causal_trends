@@ -12,7 +12,7 @@
 #         is 1 - P4 for E. The prevalence of all causes of D     #
 #         is 1 - P4 for D                                        #
 # Rule 6: The prevalence of U4 increases over time               #
-# Rule 7: The prevalence of U3 decreases over time               #
+# Rule 7: The prevalence of U3 is stable over time               #
 # Rule 8: Pr(E) = 1 if U3 or C and U4                            #
 # Rule 9: Pr(D) = 1 if C and U1 or U2. E does not cause D        #
 #                                                                #
@@ -38,10 +38,11 @@ for(i in 0:9){
 rules_1 <- tibble(time = 1:10, 
                 u1 = 0.25, 
                 u2 = 0.05, 
-                RR_D_C = (u1 + u2) / u2,
+                ### substract the middle of the venn diagram (double counted)
+                RR_D_C = (u1 + u2 - (u1*u2)) / (u2 - (u1*u2)),
                 u3 = 0.4 - u4, 
                 u4 = u4, 
-                RR_E_C = (u3 + u4) / u4)
+                RR_E_C = (u3 + u4 - (u3*u4)) / (u4 - (u3*u4)))
 
 rules_1
 

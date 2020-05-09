@@ -57,14 +57,16 @@ for(i in 1:niterations) {
                                     pr_d = mean(d))
 }
 
-mean_e
+rules_1
+
+listprev
 
 ### Function to select C, E, or D from each df in the list of dataframes
 list_select_pr <- function(some_list, x, y){
   return(some_list[[x]][[y]])
 }
 
-lapply(mylist, aggregate, list(df$time), mean)
+lapply(listprev, aggregate, list(df$time), mean)
 
 df %>%
   summarise(pr_c = mean(c),
